@@ -4,6 +4,10 @@ __author__ = 'jssmith'
 A GUI for displaying 1D scans collected using the EPICS scan record
 '''
 
+'''
+restart project March 2024
+'''
+
 # import necessary modules
 import sys
 from PyQt5 import QtWidgets as qtw

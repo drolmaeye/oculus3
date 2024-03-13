@@ -50,7 +50,7 @@ class MainWindow(qtw.QMainWindow):
         Plot Window
         '''
         # make plot window for upper potion of main window
-        self.plot_window = pg.PlotWidget(name='Plot1')
+        self.plot_window = pg.PlotWidget(name='Plot1')#, background='w')
         # self.plot_window.addLegend()
         # custom viewbox, vb, allows for custom button event handling, placeholder here in case
         # self.plot_window = pg.PlotWidget(viewBox=vb, name='Plot1')

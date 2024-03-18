@@ -28,7 +28,9 @@ class CoreData(qtc.QObject):
     # pv, p0, min, center, max, step, width, scan mode, abs/rel, and readback array
     pos_attrs = ('PV', 'PP', 'SP', 'CP', 'EP', 'SI', 'WD', 'SM', 'AR', 'RA')
 
-    update_active_detectors_signal = qtc.pyqtSignal()
+    active_detectors_modified_signal = qtc.pyqtSignal()
+    realtime_scandata_modified_signal = qtc.pyqtSignal()
+    scan_start_stop_signal = qtc.pyqtSignal()
 
     def __init__(self, root, stump):
         super().__init__()
@@ -89,54 +91,20 @@ class CoreData(qtc.QObject):
         self.data.add_callback(self.data_triggered)
 
         # connect signals to slots
-        self.update_active_detectors_signal.connect(self.update_active_detectors)
+        self.active_detectors_modified_signal.connect(self.update_active_detectors)
+        self.realtime_scandata_modified_signal.connect(self.update_realtime_scandata)
+        self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
 
-    print('initialization complete')
-
-    # epics callbacks
+    # EPICS callbacks
     def detectors_modified(self, **kwargs):
-        return self.update_active_detectors_signal.emit()
+        return self.active_detectors_modified_signal.emit()
 
     def val_triggered(self, **kwargs):
-        print('val triggered')
-        current_index = self.cpt.value - 1
-        self.x_values[current_index] = self.rncv['R1CV'].value
-        for detectors in self.active_detectors:
-            print(detectors)
-            self.active_detectors[detectors][current_index] = self.dnncv[detectors].value
-            print(self.active_detectors[detectors][:current_index + 1])
-            # eye.dnncv[detectors].setData(self.x_values[:current_index + 1],
-            #                              self.active_detectors[detectors][:current_index + 1])
-        # eye.update_plot_signal.emit()
+        return self.realtime_scandata_modified_signal.emit()
 
     def data_triggered(self, **kwargs):
-        if self.data.value == 0:
-            print('scan is starting')
-            # scan is starting
-            # self.update_pos_name_signal.emit()
-            pp = self.pnpv['P1PP'].value
-            sp = self.pnpv['P1SP'].value
-            ep = self.pnpv['P1EP'].value
-            if self.pnpv['P1AR'].value == 0:
-                x_min = sp
-                x_max = ep
-            else:
-                x_min = pp + sp
-                x_max = pp + ep
-            # TODO send these values out to GUI for initial draw
-            # eye.pw.setXRange(x_min, x_max)
-            # width = x_max - x_min
-            # eye.vline_min.setX(x_min + width * 0.25)
-            # eye.vline_mid.setX(x_min + width * 0.50)
-            # eye.vline_max.setX(x_min + width * 0.75)
-        else:
-            # scan is ending
-            print('scan is finsihed')
-            # in reality, probably need to plot DddDA and PnRA arrays
-            num_points = self.npts.value
-            print(self.x_values[:num_points])
-            for detectors in self.active_detectors:
-                print(self.active_detectors[detectors][:num_points])
+        return self.scan_start_stop_signal.emit()
+
 
     # pyqtSlots
     def update_active_detectors(self):
@@ -148,7 +116,6 @@ class CoreData(qtc.QObject):
             #  check to see if detector PV has been accepted by EPICS
             if caget(self.trunk + nv_branch) == 0:
                 # add acceptable PVs to the new active detectors dictionary
-                # self.active_detectors[det_key] = self.dnncv[det_key]
                 self.active_detectors[det_key] = np.zeros(CoreData.MAX_NUM_POINTS)
                 # try to extract a PV name for the gui
                 new_trunk = self.dnnpv[pv_key].value.rsplit('.')[0]
@@ -185,10 +152,53 @@ class CoreData(qtc.QObject):
             # eye.dnncb[cb_key].setText(name)
         print(self.active_detectors)
 
+    def update_realtime_scandata(self):
+        current_index = self.cpt.value - 1
+        self.x_values[current_index] = self.rncv['R1CV'].value
+        for detectors in self.active_detectors:
+            print(detectors)
+            self.active_detectors[detectors][current_index] = self.dnncv[detectors].value
+            print(self.active_detectors[detectors][:current_index + 1])
+            # eye.dnncv[detectors].setData(self.x_values[:current_index + 1],
+            #                              self.active_detectors[detectors][:current_index + 1])
+        # eye.update_plot_signal.emit()
+
+    def initialize_finalize_scan(self):
+        if self.data.value == 0:
+            print('scan is starting')
+            # scan is starting
+            # self.update_pos_name_signal.emit()
+            pp = self.pnpv['P1PP'].value
+            sp = self.pnpv['P1SP'].value
+            ep = self.pnpv['P1EP'].value
+            if self.pnpv['P1AR'].value == 1:
+                x_min = pp + sp
+                x_max = pp + ep
+            else:
+                x_min = sp
+                x_max = ep
+            # TODO send these values out to GUI for initial draw
+            # eye.pw.setXRange(x_min, x_max)
+            # width = x_max - x_min
+            # eye.vline_min.setX(x_min + width * 0.25)
+            # eye.vline_mid.setX(x_min + width * 0.50)
+            # eye.vline_max.setX(x_min + width * 0.75)
+        else:
+            # scan is ending
+            print('scan is finsihed')
+            # in reality, probably need to plot DddDA and PnRA arrays
+            num_points = self.npts.value
+            print(self.x_values[:num_points])
+            for detectors in self.active_detectors:
+                print(self.active_detectors[detectors][:num_points])
+
+
+
 if __name__ == '__main__':
     app = qtw.QApplication(sys.argv)
     crate, scann = '16test:', 'scan1.'
     core = CoreData(root=crate, stump=scann)
+    core.active_detectors_modified_signal.emit()
     gui = MainWindow()
     gui.show()
     sys.exit(app.exec_())

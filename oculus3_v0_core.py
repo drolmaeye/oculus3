@@ -30,8 +30,8 @@ class CoreData(qtc.QObject):
 
     active_positioners_modified_signal = qtc.pyqtSignal()
     active_detectors_modified_signal = qtc.pyqtSignal()
-    realtime_scandata_modified_signal = qtc.pyqtSignal()
-    scan_start_stop_signal = qtc.pyqtSignal()
+    ## realtime_scandata_modified_signal = qtc.pyqtSignal()
+    ## scan_start_stop_signal = qtc.pyqtSignal()
 
     def __init__(self, root, stump):
         super().__init__()
@@ -91,22 +91,22 @@ class CoreData(qtc.QObject):
             self.dnnpv[key_pv].wait_for_connection()
             self.dnnpv[key_pv].add_callback(self.detectors_modified)
 
-        # create positioner- and detector-independent PVs
-        self.val = PV(self.trunk + 'VAL')
-        self.data = PV(self.trunk + 'DATA')
-        self.cpt = PV(self.trunk + 'CPT')
-        self.npts = PV(self.trunk + 'NPTS')
-        # add callbacks for independent PVs (after connections are established)
-        self.val.wait_for_connection()
-        self.val.add_callback(self.val_triggered)
-        self.data.wait_for_connection()
-        self.data.add_callback(self.data_triggered)
+        ## # create positioner- and detector-independent PVs
+        ## self.val = PV(self.trunk + 'VAL')
+        ## self.data = PV(self.trunk + 'DATA')
+        ## self.cpt = PV(self.trunk + 'CPT')
+        ## self.npts = PV(self.trunk + 'NPTS')
+        ## # add callbacks for independent PVs (after connections are established)
+        ## self.val.wait_for_connection()
+        ## self.val.add_callback(self.val_triggered)
+        ## self.data.wait_for_connection()
+        ## self.data.add_callback(self.data_triggered)
 
         # connect signals to slots
         self.active_positioners_modified_signal.connect(self.update_active_positioners)
         self.active_detectors_modified_signal.connect(self.update_active_detectors)
-        self.realtime_scandata_modified_signal.connect(self.update_realtime_scandata)
-        self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
+        ## self.realtime_scandata_modified_signal.connect(self.update_realtime_scandata)
+        ## self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
 
     # EPICS callbacks
     def positioners_modified(self, pvname, **kwargs):
@@ -117,11 +117,11 @@ class CoreData(qtc.QObject):
         self.detectors_modified_flag = True
         return self.active_detectors_modified_signal.emit()
 
-    def val_triggered(self, **kwargs):
-        return self.realtime_scandata_modified_signal.emit()
+    ## def val_triggered(self, **kwargs):
+    ##     return self.realtime_scandata_modified_signal.emit()
 
-    def data_triggered(self, **kwargs):
-        return self.scan_start_stop_signal.emit()
+    ## def data_triggered(self, **kwargs):
+    ##     return self.scan_start_stop_signal.emit()
 
     # pyqtSlots
     def update_active_positioners(self):
@@ -180,44 +180,44 @@ class CoreData(qtc.QObject):
                 else:
                     self.active_detectors_names[pv_key] = self.dnnpv[pv_key].value
 
-    def update_realtime_scandata(self):
-        current_index = self.cpt.value - 1
-        for positioners in self.active_positioners_position_arrays:
-            self.active_positioners_position_arrays[positioners][current_index] = self.rncv[positioners].value
-            print(self.active_positioners_position_arrays[positioners][:current_index + 1])
-        for detectors in self.active_detectors_data_arrays:
-            self.active_detectors_data_arrays[detectors][current_index] = self.dnncv[detectors].value
-            print(self.active_detectors_data_arrays[detectors][:current_index + 1])
+    ## def update_realtime_scandata(self):
+    ##     current_index = self.cpt.value - 1
+    ##     for positioners in self.active_positioners_position_arrays:
+    ##         self.active_positioners_position_arrays[positioners][current_index] = self.rncv[positioners].value
+    ##         print(self.active_positioners_position_arrays[positioners][:current_index + 1])
+    ##     for detectors in self.active_detectors_data_arrays:
+    ##         self.active_detectors_data_arrays[detectors][current_index] = self.dnncv[detectors].value
+    ##         print(self.active_detectors_data_arrays[detectors][:current_index + 1])
 
-    def initialize_finalize_scan(self):
-        pass
-        # if self.data.value == 0:
-        #     print('scan is starting')
-        #     # scan is starting
-        #     # self.update_pos_name_signal.emit()
-        #     pp = self.pnpv['P1PP'].value
-        #     sp = self.pnpv['P1SP'].value
-        #     ep = self.pnpv['P1EP'].value
-        #     if self.pnpv['P1AR'].value == 1:
-        #         x_min = pp + sp
-        #         x_max = pp + ep
-        #     else:
-        #         x_min = sp
-        #         x_max = ep
-        #     # TODO send these values out to GUI for initial draw
-        #     # eye.pw.setXRange(x_min, x_max)
-        #     # width = x_max - x_min
-        #     # eye.vline_min.setX(x_min + width * 0.25)
-        #     # eye.vline_mid.setX(x_min + width * 0.50)
-        #     # eye.vline_max.setX(x_min + width * 0.75)
-        # else:
-        #     # scan is ending
-        #     print('scan is finsihed')
-        #     # in reality, probably need to plot DddDA and PnRA arrays
-        #     num_points = self.npts.value
-        #     print(self.x_values[:num_points])
-        #     for detectors in self.active_detectors:
-        #         print(self.active_detectors[detectors][:num_points])
+    ## def initialize_finalize_scan(self):
+    ##     pass
+    ##     # if self.data.value == 0:
+    ##     #     print('scan is starting')
+    ##     #     # scan is starting
+    ##     #     # self.update_pos_name_signal.emit()
+    ##     #     pp = self.pnpv['P1PP'].value
+    ##     #     sp = self.pnpv['P1SP'].value
+    ##     #     ep = self.pnpv['P1EP'].value
+    ##     #     if self.pnpv['P1AR'].value == 1:
+    ##     #         x_min = pp + sp
+    ##     #         x_max = pp + ep
+    ##     #     else:
+    ##     #         x_min = sp
+    ##     #         x_max = ep
+    ##     #     # TODO send these values out to GUI for initial draw
+    ##     #     # eye.pw.setXRange(x_min, x_max)
+    ##     #     # width = x_max - x_min
+    ##     #     # eye.vline_min.setX(x_min + width * 0.25)
+    ##     #     # eye.vline_mid.setX(x_min + width * 0.50)
+    ##     #     # eye.vline_max.setX(x_min + width * 0.75)
+    ##     # else:
+    ##     #     # scan is ending
+    ##     #     print('scan is finsihed')
+    ##     #     # in reality, probably need to plot DddDA and PnRA arrays
+    ##     #     num_points = self.npts.value
+    ##     #     print(self.x_values[:num_points])
+    ##     #     for detectors in self.active_detectors:
+    ##     #         print(self.active_detectors[detectors][:num_points])
 
 
 

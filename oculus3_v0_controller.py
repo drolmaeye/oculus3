@@ -9,6 +9,7 @@ from epics.devices import Scan
 import time
 import os
 from oculus3_v0_core import CoreData
+from oculus3_v0_view import PyQtView
 
 
 class MainWindow(qtw.QMainWindow):
@@ -22,13 +23,14 @@ class MainWindow(qtw.QMainWindow):
 class OculusController(qtc.QObject):
 
     realtime_scandata_modified_signal = qtc.pyqtSignal()
-    scan_start_stop_signal = qtc.pyqtSignal()
+    scan_start_stop_signal = qtc.pyqtSignal(int)
 
-    def __init__(self, model):
+    def __init__(self, root, stump):
         super().__init__()
+
         # create references to the model and view
-        self.model = model
-        # self.view = view
+        self.model = CoreData(root, stump)
+        self.view = PyQtView(self)
 
         # create real-time scan activity PVs
         self.val = PV(self.model.trunk + 'VAL')
@@ -45,62 +47,83 @@ class OculusController(qtc.QObject):
         self.realtime_scandata_modified_signal.connect(self.update_realtime_scandata)
         self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
 
+    def startup_sequence(self):
+        self.view.show()
+        self.model.active_positioners_modified_signal.emit()
+        self.model.active_detectors_modified_signal.emit()
+
     # EPICS callbacks
     def val_triggered(self, **kwargs):
         return self.realtime_scandata_modified_signal.emit()
 
-    def data_triggered(self, **kwargs):
-        return self.scan_start_stop_signal.emit()
+    def data_triggered(self, value, **kwargs):
+        return self.scan_start_stop_signal.emit(value)
 
     # PyQtSlots
     def update_realtime_scandata(self):
         current_index = self.cpt.value - 1
         for positioners in self.model.active_positioners_position_arrays:
             self.model.active_positioners_position_arrays[positioners][current_index] = self.model.rncv[positioners].value
-            print(self.model.active_positioners_position_arrays[positioners][:current_index + 1])
+            # print(self.model.active_positioners_position_arrays[positioners][:current_index + 1])
+        n = self.view.active_horizontal_axis_combo.currentIndex() + 1
+        self.model.current_x_values[:current_index + 1] = self.model.active_positioners_position_arrays[f'R{n}CV'][:current_index + 1]
+        # print(self.model.current_x_values[:current_index + 1])
         for detectors in self.model.active_detectors_data_arrays:
             self.model.active_detectors_data_arrays[detectors][current_index] = self.model.dnncv[detectors].value
-            print(self.model.active_detectors_data_arrays[detectors][:current_index + 1])
+            # print(self.model.active_detectors_data_arrays[detectors][:current_index + 1])
+            if current_index > 0:
+                self.view.dnncv[detectors].setData(self.model.current_x_values[:current_index + 1],
+                                                   self.model.active_detectors_data_arrays[detectors][:current_index + 1])
+        # self.view.update_plot()
 
-    def initialize_finalize_scan(self):
-        pass
-        # if self.data.value == 0:
-        #     print('scan is starting')
-        #     # scan is starting
-        #     # self.update_pos_name_signal.emit()
-        #     pp = self.pnpv['P1PP'].value
-        #     sp = self.pnpv['P1SP'].value
-        #     ep = self.pnpv['P1EP'].value
-        #     if self.pnpv['P1AR'].value == 1:
-        #         x_min = pp + sp
-        #         x_max = pp + ep
-        #     else:
-        #         x_min = sp
-        #         x_max = ep
-        #     # TODO send these values out to GUI for initial draw
-        #     # eye.pw.setXRange(x_min, x_max)
-        #     # width = x_max - x_min
-        #     # eye.vline_min.setX(x_min + width * 0.25)
-        #     # eye.vline_mid.setX(x_min + width * 0.50)
-        #     # eye.vline_max.setX(x_min + width * 0.75)
-        # else:
-        #     # scan is ending
-        #     print('scan is finsihed')
-        #     # in reality, probably need to plot DddDA and PnRA arrays
-        #     num_points = self.npts.value
-        #     print(self.x_values[:num_points])
-        #     for detectors in self.active_detectors:
-        #         print(self.active_detectors[detectors][:num_points])
+    def initialize_finalize_scan(self, value):
+        if value == 0:
+            print('scan is starting')
+            # scan is starting
+            if self.model.positioners_modified_flag:
+                self.update_gui_positioner_names()
+            if self.model.detectors_modified_flag:
+                self.update_gui_detector_names()
+            n = self.view.active_horizontal_axis_combo.currentIndex() + 1
+            pp = self.model.pnpv[f'P{n}PP'].value
+            sp = self.model.pnpv[f'P{n}SP'].value
+            ep = self.model.pnpv[f'P{n}EP'].value
+            wd = self.model.pnpv[f'P{n}WD'].value
+            if self.model.pnpv[f'P{n}AR'].value == 1:
+                x_min = pp + sp
+                x_max = pp + ep
+            else:
+                x_min = sp
+                x_max = ep
+            self.view.plot_window.setXRange(x_min, x_max)
+            self.view.vline_min.setValue(x_min + wd * 0.25)
+            self.view.vline_max.setValue(x_min + wd * 0.75)
+        else:
+            print('scan is finsihed')
+            # in reality, probably need to plot DddDA and PnRA arrays
+            num_points = self.npts.value
+            for positioners in self.model.active_positioners_position_arrays:
+                print(self.model.active_positioners_position_arrays[positioners][:num_points])
+            for detectors in self.model.active_detectors_data_arrays:
+                print(self.model.active_detectors_data_arrays[detectors][:num_points])
+
+    def update_gui_positioner_names(self):
+        self.model.positioners_modified_flag = False
+        self.view.active_horizontal_axis_combo.clear()
+        for positioners in self.model.active_positioners_names:
+            text = self.model.active_positioners_names[positioners]
+            self.view.active_horizontal_axis_combo.addItem(text)
+
+    def update_gui_detector_names(self):
+        self.model.detectors_modified_flag = False
+        for detectors in self.model.active_detectors_names:
+            key_cb = detectors.replace('PV', 'CB')
+            self.view.dnncb[key_cb].setText(self.model.active_detectors_names[detectors])
+
 
 if __name__ == '__main__':
     app = qtw.QApplication(sys.argv)
     crate, scann = '16test:', 'scan1.'
-    # core = CoreData(root=crate, stump=scann)
-    # core.active_detectors_modified_signal.emit()
-    controller = OculusController(CoreData(crate, scann))
-    # stuff below should just go in a startup method within controller
-    controller.model.active_positioners_modified_signal.emit()
-    controller.model.active_detectors_modified_signal.emit()
-    gui = MainWindow()
-    gui.show()
+    controller = OculusController(crate, scann)
+    controller.startup_sequence()
     sys.exit(app.exec_())

@@ -8,11 +8,13 @@ from epics import PV, caget
 from epics.devices import Scan
 import time
 import os
+from oculus3_v0_core import CoreData
 
 
-class MainWindow(qtw.QMainWindow):
-    def __init__(self):
+class PyQtView(qtw.QMainWindow):
+    def __init__(self, controller):
         super().__init__()
+
         self.setGeometry(100, 100, 1080, 720)
         self.setWindowTitle('Oculus')
         self.setWindowIcon(qtg.QIcon('eye1.png'))
@@ -81,14 +83,12 @@ class MainWindow(qtw.QMainWindow):
             for j in color_list:
                 keywords = {'pen': {'color': j, 'width': width}, 'symbolBrush': j, 'symbolPen': j, 'symbol': i, 'symbolSize': symbol_size}
                 line_style_list.append(keywords)
-        # print(line_style_list)
 
         self.dnncv = {}
-        # for i in range(1, scan1.NUM_DETECTORS + 1):
-        for i in range(1, 31):
+        for i in range(1, CoreData.NUM_DETECTORS + 1):
             key_cv = 'D%2.2iCV' % i
             self.dnncv[key_cv] = pg.PlotDataItem(name=key_cv, **line_style_list[i - 1])
-            self.plot_window.addItem(self.dnncv[key_cv])
+            # self.plot_window.addItem(self.dnncv[key_cv])
 
 
         # create, add, and connect movable vertical and horizontal lines
@@ -221,21 +221,54 @@ class MainWindow(qtw.QMainWindow):
         Detectors Window
         '''
 
+        ## # create position control groupbox and add to the right side layout
+        ## self.detectors_control = qtw.QGroupBox()
+        ## self.detectors_control.setTitle('Detectors Control')
+        ## self.detectors_control_layout = qtw.QGridLayout()
+        ## self.detectors_control.setLayout(self.detectors_control_layout)
+        ## self.right_side_layout.addWidget(self.detectors_control)
+        ##
+        ## self.dnncb = {}
+        ## for i in range(10):
+        ##     for j in range(3):
+        ##         number = j * 10 + 1 + i
+        ##         key_cb = 'D%2.2iCB' % number
+        ##         self.dnncb[key_cb] = qtw.QCheckBox(str(number))
+        ##         self.dnncb[key_cb].stateChanged.connect(self.det_cbox_toggled)
+        ##         self.detectors_control_layout.addWidget(self.dnncb[key_cb], i, j)
+
+        '''
+        Detectors Window
+        '''
+
         # create position control groupbox and add to the right side layout
         self.detectors_control = qtw.QGroupBox()
         self.detectors_control.setTitle('Detectors Control')
-        self.detectors_control_layout = qtw.QGridLayout()
+        self.detectors_control_layout = qtw.QVBoxLayout()
         self.detectors_control.setLayout(self.detectors_control_layout)
         self.right_side_layout.addWidget(self.detectors_control)
 
+        self.detectors_tab_widget = qtw.QTabWidget()
+        self.detectors_control_layout.addWidget(self.detectors_tab_widget)
+
         self.dnncb = {}
-        for i in range(10):
-            for j in range(3):
-                number = j * 10 + 1 + i
+        num_tabs = CoreData.NUM_DETECTORS // 10
+        for i in range(num_tabs):
+            detectors_tab = qtw.QWidget()
+            detectors_tab_layout = qtw.QVBoxLayout()
+            detectors_tab.setLayout(detectors_tab_layout)
+            for j in range(10):
+                number = i * 10 + 1 + j
                 key_cb = 'D%2.2iCB' % number
                 self.dnncb[key_cb] = qtw.QCheckBox(str(number))
+                # self.dnncb[key_cb] = qtw.QCheckBox()
                 self.dnncb[key_cb].stateChanged.connect(self.det_cbox_toggled)
-                self.detectors_control_layout.addWidget(self.dnncb[key_cb], i, j)
+                detectors_tab_layout.addWidget(self.dnncb[key_cb])
+            label_min = i * 10 + 1
+            label_max = label_min + 9
+            self.detectors_tab_widget.addTab(detectors_tab, f'{label_min} - {label_max}')
+
+
 
         '''Windows control'''
 
@@ -289,16 +322,9 @@ class MainWindow(qtw.QMainWindow):
         print(self.plot_window.listDataItems())
 
 
-
-
-
-
-
-
-
-
 if __name__ == '__main__':
     app = qtw.QApplication(sys.argv)
-    gui = MainWindow()
+    controller = None
+    gui = PyQtView(controller)
     gui.show()
     sys.exit(app.exec_())

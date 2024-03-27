@@ -3,6 +3,7 @@ from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtCore as qtc
 from PyQt5 import QtGui as qtg
 import pyqtgraph as pg
+import constants
 import numpy as np
 from epics import PV, caget
 from epics.devices import Scan
@@ -85,7 +86,7 @@ class PyQtView(qtw.QMainWindow):
                 line_style_list.append(keywords)
 
         self.dnncv = {}
-        for i in range(1, CoreData.NUM_DETECTORS + 1):
+        for i in range(1, constants.NUM_DETECTORS + 1):
             key_cv = 'D%2.2iCV' % i
             self.dnncv[key_cv] = pg.PlotDataItem(name=key_cv, **line_style_list[i - 1])
             # self.plot_window.addItem(self.dnncv[key_cv])
@@ -252,7 +253,7 @@ class PyQtView(qtw.QMainWindow):
         self.detectors_control_layout.addWidget(self.detectors_tab_widget)
 
         self.dnncb = {}
-        num_tabs = CoreData.NUM_DETECTORS // 10
+        num_tabs = constants.NUM_DETECTORS // 10
         for i in range(num_tabs):
             detectors_tab = qtw.QWidget()
             detectors_tab_layout = qtw.QVBoxLayout()

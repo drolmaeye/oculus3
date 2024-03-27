@@ -1,33 +1,25 @@
 import sys
 from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtCore as qtc
-from PyQt5 import QtGui as qtg
-import pyqtgraph as pg
 import numpy as np
 from epics import PV, caget
-from epics.devices import Scan
+import constants
 import time
-import os
 
 
 class MainWindow(qtw.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setGeometry(100, 100, 1080, 720)
+        self.setGeometry(100, 100, 540, 360)
         self.setWindowTitle('Oculus')
-        self.setWindowIcon(qtg.QIcon('eye1.png'))
 
 
 class CoreData(qtc.QObject):
-    NUM_POSITIONERS = 4
-    NUM_TRIGGERS = 2
-    NUM_DETECTORS = 70
-    MAX_NUM_POINTS = 1000
-
-    # attributes to build the positioner dictionary Pnpv, including:
+    # class attributes to build the positioner dictionary pnpv, including:
     # pv, name, p0, min, center, max, step, width, scan mode, abs/rel, and readback array
     pos_attrs = ('PV', 'NV', 'PP', 'SP', 'CP', 'EP', 'SI', 'WD', 'SM', 'AR', 'RA')
 
+    # PyQt Signals
     active_positioners_modified_signal = qtc.pyqtSignal()
     active_detectors_modified_signal = qtc.pyqtSignal()
 
@@ -53,14 +45,15 @@ class CoreData(qtc.QObject):
         and names for active positioners and detectors
         '''
 
-        self.active_positioners_position_arrays = {}
+        self.active_positioners_arrays = {}
         self.active_positioners_names = {}
-        self.active_detectors_data_arrays = {}
+        self.active_detectors_arrays = {}
         self.active_detectors_names = {}
 
-        self.current_x_values = np.zeros(CoreData.MAX_NUM_POINTS)
+        self.current_x_values = np.zeros(constants.MAX_NUM_POINTS)
 
         # combine ioc prefix with scan number to generate PV trunk
+        # note that stump should end in a dot (e.g., 'scan1.')
         self.trunk = root + stump
 
         # flags to indicate if positioners or detectors have been modified
@@ -68,7 +61,7 @@ class CoreData(qtc.QObject):
         self.detectors_modified_flag = True
 
         # initialize PVs in dictionaries
-        for i in range(1, CoreData.NUM_POSITIONERS + 1):
+        for i in range(1, constants.NUM_POSITIONERS + 1):
             for a in CoreData.pos_attrs:
                 key_pnpv = 'P%i%s' % (i, a)
                 self.pnpv[key_pnpv] = PV(self.trunk + key_pnpv)
@@ -78,7 +71,7 @@ class CoreData(qtc.QObject):
             key_rncv = 'R%iCV' % i
             self.rncv[key_rncv] = PV(self.trunk + key_rncv)
 
-        for i in range(1, CoreData.NUM_DETECTORS + 1):
+        for i in range(1, constants.NUM_DETECTORS + 1):
             key_pv = 'D%2.2iPV' % i
             key_nv = 'D%2.2iNV' % i
             key_cv = 'D%2.2iCV' % i
@@ -98,6 +91,7 @@ class CoreData(qtc.QObject):
     # EPICS callbacks
     def positioners_modified(self, pvname, **kwargs):
         self.positioners_modified_flag = True
+        print(pvname)
         return self.active_positioners_modified_signal.emit()
 
     def detectors_modified(self, **kwargs):
@@ -107,15 +101,15 @@ class CoreData(qtc.QObject):
     # pyqtSlots
     def update_active_positioners(self):
         # clear existing dictionaries
-        self.active_positioners_position_arrays.clear()
+        self.active_positioners_arrays.clear()
         self.active_positioners_names.clear()
-        for i in range(1, CoreData.NUM_POSITIONERS + 1):
+        for i in range(1, constants.NUM_POSITIONERS + 1):
             nv_branch = 'P%iNV' % i
             pv_key = 'P%iPV' % i
             pos_key = 'R%iCV' % i
             if caget(self.trunk + nv_branch) == 0:
                 # fill active positioners data arrays dict with dummy arrays
-                self.active_positioners_position_arrays[pos_key] = np.zeros(CoreData.MAX_NUM_POINTS)
+                self.active_positioners_arrays[pos_key] = np.zeros(constants.MAX_NUM_POINTS)
                 # fill active positioners names arrays with common or PV names
                 new_trunk = self.pnpv[pv_key].value.rsplit('.')[0]
                 record_type = caget(new_trunk + '.RTYP')
@@ -126,16 +120,16 @@ class CoreData(qtc.QObject):
                 self.active_positioners_names[pv_key] = name
 
     def update_active_detectors(self):
-        self.active_detectors_data_arrays.clear()
+        self.active_detectors_arrays.clear()
         self.active_detectors_names.clear()
-        for i in range(1, CoreData.NUM_DETECTORS + 1):
+        for i in range(1, constants.NUM_DETECTORS + 1):
             nv_branch = 'D%2.2iNV' % i
             pv_key = 'D%2.2iPV' % i
             det_key = 'D%2.2iCV' % i
             #  check to see if detector PV has been accepted by EPICS
             if caget(self.trunk + nv_branch) == 0:
                 # fill active detectors data arrays dict with dummy arrays
-                self.active_detectors_data_arrays[det_key] = np.zeros(CoreData.MAX_NUM_POINTS)
+                self.active_detectors_arrays[det_key] = np.zeros(constants.MAX_NUM_POINTS)
                 # fill active detectors names arrays with common or PV names
                 new_trunk = self.dnnpv[pv_key].value.rsplit('.')[0]
                 new_branch = '.' + self.dnnpv[pv_key].value.rsplit('.')[1]
@@ -166,6 +160,7 @@ if __name__ == '__main__':
     app = qtw.QApplication(sys.argv)
     crate, scann = '16test:', 'scan1.'
     core = CoreData(root=crate, stump=scann)
+    core.active_positioners_modified_signal.emit()
     core.active_detectors_modified_signal.emit()
     gui = MainWindow()
     gui.show()

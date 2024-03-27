@@ -8,6 +8,7 @@ from epics import PV, caget
 from epics.devices import Scan
 import time
 import os
+import constants
 from oculus3_v0_core import CoreData
 from oculus3_v0_view import PyQtView
 
@@ -62,18 +63,18 @@ class OculusController(qtc.QObject):
     # PyQtSlots
     def update_realtime_scandata(self):
         current_index = self.cpt.value - 1
-        for positioners in self.model.active_positioners_position_arrays:
-            self.model.active_positioners_position_arrays[positioners][current_index] = self.model.rncv[positioners].value
-            # print(self.model.active_positioners_position_arrays[positioners][:current_index + 1])
+        for positioners in self.model.active_positioners_arrays:
+            self.model.active_positioners_arrays[positioners][current_index] = self.model.rncv[positioners].value
+            # print(self.model.active_positioners_arrays[positioners][:current_index + 1])
         n = self.view.active_horizontal_axis_combo.currentIndex() + 1
-        self.model.current_x_values[:current_index + 1] = self.model.active_positioners_position_arrays[f'R{n}CV'][:current_index + 1]
+        self.model.current_x_values[:current_index + 1] = self.model.active_positioners_arrays[f'R{n}CV'][:current_index + 1]
         # print(self.model.current_x_values[:current_index + 1])
-        for detectors in self.model.active_detectors_data_arrays:
-            self.model.active_detectors_data_arrays[detectors][current_index] = self.model.dnncv[detectors].value
-            # print(self.model.active_detectors_data_arrays[detectors][:current_index + 1])
+        for detectors in self.model.active_detectors_arrays:
+            self.model.active_detectors_arrays[detectors][current_index] = self.model.dnncv[detectors].value
+            # print(self.model.active_detectors_arrays[detectors][:current_index + 1])
             if current_index > 0:
                 self.view.dnncv[detectors].setData(self.model.current_x_values[:current_index + 1],
-                                                   self.model.active_detectors_data_arrays[detectors][:current_index + 1])
+                                                   self.model.active_detectors_arrays[detectors][:current_index + 1])
         # self.view.update_plot()
 
     def initialize_finalize_scan(self, value):
@@ -102,10 +103,10 @@ class OculusController(qtc.QObject):
             print('scan is finsihed')
             # in reality, probably need to plot DddDA and PnRA arrays
             num_points = self.npts.value
-            for positioners in self.model.active_positioners_position_arrays:
-                print(self.model.active_positioners_position_arrays[positioners][:num_points])
-            for detectors in self.model.active_detectors_data_arrays:
-                print(self.model.active_detectors_data_arrays[detectors][:num_points])
+            for positioners in self.model.active_positioners_arrays:
+                print(self.model.active_positioners_arrays[positioners][:num_points])
+            for detectors in self.model.active_detectors_arrays:
+                print(self.model.active_detectors_arrays[detectors][:num_points])
 
     def update_gui_positioner_names(self):
         self.model.positioners_modified_flag = False

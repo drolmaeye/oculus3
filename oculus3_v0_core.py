@@ -20,8 +20,8 @@ class CoreData(qtc.QObject):
     pos_attrs = ('PV', 'NV', 'PP', 'SP', 'CP', 'EP', 'SI', 'WD', 'SM', 'AR', 'RA')
 
     # PyQt Signals
-    active_positioners_modified_signal = qtc.pyqtSignal()
-    active_detectors_modified_signal = qtc.pyqtSignal()
+    active_positioners_modified_signal = qtc.pyqtSignal(str)
+    active_detectors_modified_signal = qtc.pyqtSignal(str)
 
     def __init__(self, root, stump):
         super().__init__()
@@ -85,83 +85,113 @@ class CoreData(qtc.QObject):
             self.dnnpv[key_pv].add_callback(self.detectors_modified)
 
         # connect signals to slots
-        self.active_positioners_modified_signal.connect(self.update_active_positioners)
-        self.active_detectors_modified_signal.connect(self.update_active_detectors)
+        self.active_positioners_modified_signal.connect(self.update_active_positioner)
+        self.active_detectors_modified_signal.connect(self.update_active_detector)
+
+        self.initialize_active_positioners()
+        self.initialize_active_detectors()
 
     # EPICS callbacks
     def positioners_modified(self, pvname, **kwargs):
         self.positioners_modified_flag = True
-        print(pvname)
-        return self.active_positioners_modified_signal.emit()
+        return self.active_positioners_modified_signal.emit(pvname)
 
-    def detectors_modified(self, **kwargs):
+    def detectors_modified(self, pvname, **kwargs):
         self.detectors_modified_flag = True
-        return self.active_detectors_modified_signal.emit()
+        return self.active_detectors_modified_signal.emit(pvname)
 
-    # pyqtSlots
-    def update_active_positioners(self):
-        # clear existing dictionaries
-        self.active_positioners_arrays.clear()
-        self.active_positioners_names.clear()
-        for i in range(1, constants.NUM_POSITIONERS + 1):
-            nv_branch = 'P%iNV' % i
-            pv_key = 'P%iPV' % i
-            pos_key = 'R%iCV' % i
-            if caget(self.trunk + nv_branch) == 0:
-                # fill active positioners data arrays dict with dummy arrays
-                self.active_positioners_arrays[pos_key] = np.zeros(constants.MAX_NUM_POINTS)
-                # fill active positioners names arrays with common or PV names
-                new_trunk = self.pnpv[pv_key].value.rsplit('.')[0]
-                record_type = caget(new_trunk + '.RTYP')
-                if record_type == 'motor':
-                    name = caget(new_trunk + '.DESC')
+    def update_active_positioner(self, pvname):
+        n = pvname[-3]
+        validity = caget(self.trunk + f'P{n}NV', use_monitor=False)
+        if validity == 0:
+            self.active_positioners_arrays[f'R{n}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+            self.update_active_positioners_names(n)
+        else:
+            if f'R{n}CV' in self.active_positioners_arrays:
+                del self.active_positioners_arrays[f'R{n}CV']
+                del self.active_positioners_names[f'P{n}PV']
+
+    def initialize_active_positioners(self):
+        for n in range(1, constants.NUM_POSITIONERS + 1):
+            if self.pnpv[f'P{n}NV'].value == 0:
+                self.active_positioners_arrays[f'R{n}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+                self.update_active_positioners_names(n)
+
+    def update_active_positioners_names(self, n):
+        # either get a proper motor name or just identify by PV name
+        if '.' in self.pnpv[f'P{n}PV'].value:
+            new_trunk = self.pnpv[f'P{n}PV'].value.rsplit('.')[0]
+            record_type = caget(new_trunk + '.RTYP')
+            if record_type == 'motor':
+                description = caget(new_trunk + '.DESC')
+                if description:
+                    name = description
                 else:
-                    name = self.pnpv[pv_key].value
-                self.active_positioners_names[pv_key] = name
+                    name = self.pnpv[f'P{n}PV'].value
+            else:
+                name = self.pnpv[f'P{n}PV'].value
+        else:
+            name = self.pnpv[f'P{n}PV'].value
+        self.active_positioners_names[f'P{n}PV'] = name
 
-    def update_active_detectors(self):
-        self.active_detectors_arrays.clear()
-        self.active_detectors_names.clear()
+    def update_active_detector(self, pvname):
+        uad_start = time.time_ns() / 1000000000
+        nn = pvname[-4:-2]
+        print(nn)
+        validity = caget(self.trunk + f'D{nn}NV', use_monitor=False)
+        print(validity)
+        #  check to see if detector PV has been accepted by EPICS
+        if validity == 0:
+            # fill active detectors data arrays dict with dummy arrays
+            self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+            self.update_active_detectors_names(nn)
+        else:
+            if f'D{nn}CV' in self.active_detectors_arrays:
+                del self.active_detectors_arrays[f'D{nn}CV']
+                del self.active_detectors_names[f'D{nn}PV']
+        uad_end = time.time_ns() / 1000000000
+        print(f'update one detector tme is {uad_end - uad_start}')
+        return print(self.active_detectors_names)
+
+    def initialize_active_detectors(self):
         for i in range(1, constants.NUM_DETECTORS + 1):
-            nv_branch = 'D%2.2iNV' % i
-            pv_key = 'D%2.2iPV' % i
-            det_key = 'D%2.2iCV' % i
-            #  check to see if detector PV has been accepted by EPICS
-            if caget(self.trunk + nv_branch) == 0:
-                # fill active detectors data arrays dict with dummy arrays
-                self.active_detectors_arrays[det_key] = np.zeros(constants.MAX_NUM_POINTS)
-                # fill active detectors names arrays with common or PV names
-                new_trunk = self.dnnpv[pv_key].value.rsplit('.')[0]
-                new_branch = '.' + self.dnnpv[pv_key].value.rsplit('.')[1]
-                record_type = caget(new_trunk + '.RTYP')
-                if record_type == 'scaler':
-                    if '.S' in new_branch:
-                        name_branch = new_branch.replace('S', 'NM')
-                        name = caget(new_trunk + name_branch)
-                    elif '.T' in new_branch:
-                        name = 'Elapsed Time'
-                    else:
-                        name = ''
-                elif record_type == 'transform':
-                    name_branch = new_branch[:1] + 'CMT' + new_branch[1:]
+            nn = '%2.2i' % i
+            if caget(self.trunk + f'D{nn}NV') == 0:
+                self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+                self.update_active_detectors_names(nn)
+
+    def update_active_detectors_names(self, nn):
+        if '.' in self.dnnpv[f'D{nn}PV'].value:
+            new_trunk = self.dnnpv[f'D{nn}PV'].value.rsplit('.')[0]
+            new_branch = '.' + self.dnnpv[f'D{nn}PV'].value.rsplit('.')[1]
+            record_type = caget(new_trunk + '.RTYP')
+            if record_type == 'scaler':
+                if '.S' in new_branch:
+                    name_branch = new_branch.replace('S', 'NM')
                     name = caget(new_trunk + name_branch)
-                elif record_type == 'mca':
-                    name_branch = new_branch + 'NM'
-                    name = caget(new_trunk + name_branch)
+                elif '.T' in new_branch:
+                    name = 'Elapsed Time'
                 else:
                     name = ''
-                if name:
-                    self.active_detectors_names[pv_key] = name
-                else:
-                    self.active_detectors_names[pv_key] = self.dnnpv[pv_key].value
+            elif record_type == 'transform':
+                name_branch = new_branch[:1] + 'CMT' + new_branch[1:]
+                name = caget(new_trunk + name_branch)
+            elif record_type == 'mca':
+                name_branch = new_branch + 'NM'
+                name = caget(new_trunk + name_branch)
+            else:
+                name = ''
+            if name:
+                self.active_detectors_names[f'D{nn}PV'] = name
+            else:
+                self.active_detectors_names[f'D{nn}PV'] = self.dnnpv[f'D{nn}PV'].value
+        return print(self.active_detectors_names)
 
 
 if __name__ == '__main__':
     app = qtw.QApplication(sys.argv)
     crate, scann = '16test:', 'scan1.'
     core = CoreData(root=crate, stump=scann)
-    core.active_positioners_modified_signal.emit()
-    core.active_detectors_modified_signal.emit()
     gui = MainWindow()
     gui.show()
     sys.exit(app.exec_())

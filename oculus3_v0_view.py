@@ -9,7 +9,6 @@ from epics import PV, caget
 from epics.devices import Scan
 import time
 import os
-from oculus3_v0_core import CoreData
 
 
 class PyQtView(qtw.QMainWindow):
@@ -197,6 +196,15 @@ class PyQtView(qtw.QMainWindow):
         self.vax_hline_max_position_button = qtw.QPushButton('')
         self.vax_hline_markers_width = qtw.QLineEdit()
 
+        # connect signals to slots
+        self.active_horizontal_axis_combo.currentIndexChanged.connect(controller.update_active_positioner)
+        self.hax_vline_min_position_button.clicked.connect(lambda: controller.move_active_positioner(self.hax_vline_min_position_button.text()))
+        self.hax_vline_mid_position_button.clicked.connect(lambda: controller.move_active_positioner(self.hax_vline_mid_position_button.text()))
+        self.hax_vline_max_position_button.clicked.connect(lambda: controller.move_active_positioner(self.hax_vline_max_position_button.text()))
+
+
+
+
         # add position control widgets to position control groupbox
         self.position_control_layout.addWidget(self.active_element_label, 0, 1, 1, 2)
         self.position_control_layout.addWidget(self.minimum_position_label, 0, 3)
@@ -217,26 +225,6 @@ class PyQtView(qtw.QMainWindow):
         self.position_control_layout.addWidget(self.vax_hline_mid_position_button, 2, 4)
         self.position_control_layout.addWidget(self.vax_hline_max_position_button, 2, 5)
         self.position_control_layout.addWidget(self.vax_hline_markers_width, 2, 6)
-
-        '''
-        Detectors Window
-        '''
-
-        ## # create position control groupbox and add to the right side layout
-        ## self.detectors_control = qtw.QGroupBox()
-        ## self.detectors_control.setTitle('Detectors Control')
-        ## self.detectors_control_layout = qtw.QGridLayout()
-        ## self.detectors_control.setLayout(self.detectors_control_layout)
-        ## self.right_side_layout.addWidget(self.detectors_control)
-        ##
-        ## self.dnncb = {}
-        ## for i in range(10):
-        ##     for j in range(3):
-        ##         number = j * 10 + 1 + i
-        ##         key_cb = 'D%2.2iCB' % number
-        ##         self.dnncb[key_cb] = qtw.QCheckBox(str(number))
-        ##         self.dnncb[key_cb].stateChanged.connect(self.det_cbox_toggled)
-        ##         self.detectors_control_layout.addWidget(self.dnncb[key_cb], i, j)
 
         '''
         Detectors Window
@@ -268,8 +256,6 @@ class PyQtView(qtw.QMainWindow):
             label_min = i * 10 + 1
             label_max = label_min + 9
             self.detectors_tab_widget.addTab(detectors_tab, f'{label_min} - {label_max}')
-
-
 
         '''Windows control'''
 

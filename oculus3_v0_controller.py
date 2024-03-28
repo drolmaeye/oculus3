@@ -4,7 +4,7 @@ from PyQt5 import QtCore as qtc
 from PyQt5 import QtGui as qtg
 import pyqtgraph as pg
 import numpy as np
-from epics import PV, caget
+from epics import PV, caget, caput
 from epics.devices import Scan
 import time
 import os
@@ -53,6 +53,18 @@ class OculusController(qtc.QObject):
         self.model.active_positioners_modified_signal.emit()
         self.model.active_detectors_modified_signal.emit()
 
+    def update_active_positioner(self, index):
+        if index < 0:
+            return
+        n = index + 1
+        self.update_plot_window_range(n)
+
+    def move_active_positioner(self, text):
+        # move positioner only if scan is not active
+        if self.data.value:
+            n = self.view.active_horizontal_axis_combo.currentIndex() + 1
+            caput(self.model.pnpv[f'P{n}PV'].value, text)
+
     # EPICS callbacks
     def val_triggered(self, **kwargs):
         return self.realtime_scandata_modified_signal.emit()
@@ -86,19 +98,7 @@ class OculusController(qtc.QObject):
             if self.model.detectors_modified_flag:
                 self.update_gui_detector_names()
             n = self.view.active_horizontal_axis_combo.currentIndex() + 1
-            pp = self.model.pnpv[f'P{n}PP'].value
-            sp = self.model.pnpv[f'P{n}SP'].value
-            ep = self.model.pnpv[f'P{n}EP'].value
-            wd = self.model.pnpv[f'P{n}WD'].value
-            if self.model.pnpv[f'P{n}AR'].value == 1:
-                x_min = pp + sp
-                x_max = pp + ep
-            else:
-                x_min = sp
-                x_max = ep
-            self.view.plot_window.setXRange(x_min, x_max)
-            self.view.vline_min.setValue(x_min + wd * 0.25)
-            self.view.vline_max.setValue(x_min + wd * 0.75)
+            self.update_plot_window_range(n)
         else:
             print('scan is finsihed')
             # in reality, probably need to plot DddDA and PnRA arrays
@@ -120,6 +120,28 @@ class OculusController(qtc.QObject):
         for detectors in self.model.active_detectors_names:
             key_cb = detectors.replace('PV', 'CB')
             self.view.dnncb[key_cb].setText(self.model.active_detectors_names[detectors])
+
+    def update_plot_window_range(self, n):
+        if self.data.value:
+            x_min = self.model.pnpv[f'P{n}RA'].value[0]
+            x_max = self.model.pnpv[f'P{n}RA'].value[self.cpt.value - 1]
+        else:
+            pp = self.model.pnpv[f'P{n}PP'].value
+            sp = self.model.pnpv[f'P{n}SP'].value
+            ep = self.model.pnpv[f'P{n}EP'].value
+            if self.model.pnpv[f'P{n}AR'].value == 1:
+                x_min = pp + sp
+                x_max = pp + ep
+            else:
+                x_min = sp
+                x_max = ep
+        wd = x_max - x_min
+        x_axis_label = self.view.active_horizontal_axis_combo.currentText()
+        label_style = {'color': '#808080', 'font': ' bold 16px'}
+        return (self.view.plot_window.setXRange(x_min, x_max),
+                self.view.plot_window.setLabel('bottom', x_axis_label, **label_style),
+                self.view.vline_min.setValue(x_min + wd * 0.25),
+                self.view.vline_max.setValue(x_min + wd * 0.75))
 
 
 if __name__ == '__main__':

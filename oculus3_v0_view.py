@@ -50,7 +50,12 @@ class PyQtView(qtw.QMainWindow):
         '''Plot window'''
 
         self.plot_window = pg.PlotWidget(name='plot1')
+        self.plot_item = self.plot_window.getPlotItem()
+        self.view_box = self.plot_item.getViewBox()
         self.left_side_layout.addWidget(self.plot_window)
+
+        # keep track of visible data items
+        self.visible_plot_data_items = 0
 
         # generate line and symbol lists for plot data items
         color_list = [
@@ -84,12 +89,11 @@ class PyQtView(qtw.QMainWindow):
                 keywords = {'pen': {'color': j, 'width': width}, 'symbolBrush': j, 'symbolPen': j, 'symbol': i, 'symbolSize': symbol_size}
                 line_style_list.append(keywords)
 
+        # create the pyqtgraph PlotDataItems
         self.dnncv = {}
         for i in range(1, constants.NUM_DETECTORS + 1):
             key_cv = 'D%2.2iCV' % i
             self.dnncv[key_cv] = pg.PlotDataItem(name=key_cv, **line_style_list[i - 1])
-            # self.plot_window.addItem(self.dnncv[key_cv])
-
 
         # create, add, and connect movable vertical and horizontal lines
         self.vline_min = pg.InfiniteLine(pos=-0.3, angle=90, pen='b', movable=True)
@@ -106,10 +110,23 @@ class PyQtView(qtw.QMainWindow):
         self.plot_window.addItem(self.hline_mid)
         self.plot_window.addItem(self.hline_max)
 
+        # overrides will allow user to drag lines during realtime plot
+        self.temporary_vline_override = False
+        self.temporary_hline_override = False
+
         self.vline_min.sigPositionChanged.connect(self.vline_moved)
         self.vline_max.sigPositionChanged.connect(self.vline_moved)
         self.hline_min.sigPositionChanged.connect(self.hline_moved)
         self.hline_max.sigPositionChanged.connect(self.hline_moved)
+
+        self.vline_min.sigDragged.connect(self.activate_vline_override)
+        self.vline_max.sigDragged.connect(self.activate_vline_override)
+        self.hline_min.sigDragged.connect(self.activate_hline_override)
+        self.hline_max.sigDragged.connect(self.activate_hline_override)
+
+
+
+
 
         '''
         Right side
@@ -155,6 +172,11 @@ class PyQtView(qtw.QMainWindow):
         self.reset_all_markers_button = qtw.QPushButton('All')
         self.position_difference_label = qtw.QLabel('Difference')
         self.position_difference_ledit = qtw.QLineEdit()
+
+        # connect signals to slots
+        self.reset_vertical_markers_button.clicked.connect(self.reset_vertical_markers)
+        self.reset_horizontal_markers_button.clicked.connect(self.reset_horizontal_markers)
+        self.reset_all_markers_button.clicked.connect(self.reset_all_markers)
 
         # add plot toolbar widgets to plot toolbar layout
         self.markers_control_layout.addWidget(self.reset_markers_label)
@@ -202,9 +224,6 @@ class PyQtView(qtw.QMainWindow):
         self.hax_vline_mid_position_button.clicked.connect(lambda: controller.move_active_positioner(self.hax_vline_mid_position_button.text()))
         self.hax_vline_max_position_button.clicked.connect(lambda: controller.move_active_positioner(self.hax_vline_max_position_button.text()))
 
-
-
-
         # add position control widgets to position control groupbox
         self.position_control_layout.addWidget(self.active_element_label, 0, 1, 1, 2)
         self.position_control_layout.addWidget(self.minimum_position_label, 0, 3)
@@ -240,6 +259,7 @@ class PyQtView(qtw.QMainWindow):
         self.detectors_tab_widget = qtw.QTabWidget()
         self.detectors_control_layout.addWidget(self.detectors_tab_widget)
 
+        # create dictionary of QCheckBox to toggle visibility of active detectors
         self.dnncb = {}
         num_tabs = constants.NUM_DETECTORS // 10
         for i in range(num_tabs):
@@ -267,11 +287,16 @@ class PyQtView(qtw.QMainWindow):
         self.right_side_layout.addWidget(self.windows_control)
 
         # create windows control widgets
+        self.test_button = qtw.QPushButton('Test')
         self.overlays_button = qtw.QPushButton('Overlays')
         self.abort_button = qtw.QPushButton('Abort')
         self.quit_button = qtw.QPushButton('Quit')
 
+        # connect signals to slots
+        self.test_button.clicked.connect(self.test_button_clicked)
+
         # add windows control widgets to windows control groupbox
+        self.windows_control_layout.addWidget(self.test_button)
         self.windows_control_layout.addWidget(self.overlays_button)
         self.windows_control_layout.addWidget(self.abort_button)
         self.windows_control_layout.addWidget(self.quit_button)
@@ -281,7 +306,7 @@ class PyQtView(qtw.QMainWindow):
         v_max = self.vline_max.getXPos()
         v_mid = (v_min + v_max) / 2.0
         v_width = v_max - v_min
-        self.vline_mid.setX(v_mid)
+        self.vline_mid.setValue(v_mid)
         self.hax_vline_min_position_button.setText('%.3f' % v_min)
         self.hax_vline_mid_position_button.setText('%.3f' % v_mid)
         self.hax_vline_max_position_button.setText('%.3f' % v_max)
@@ -292,11 +317,64 @@ class PyQtView(qtw.QMainWindow):
         h_max = self.hline_max.getYPos()
         h_mid = (h_min + h_max) / 2.0
         h_width = h_max - h_min
-        self.hline_mid.setY(h_mid)
+        self.hline_mid.setValue(h_mid)
         self.vax_hline_min_position_button.setText('%.3f' % h_min)
         self.vax_hline_mid_position_button.setText('%.3f' % h_mid)
         self.vax_hline_max_position_button.setText('%.3f' % h_max)
         self.vax_hline_markers_width.setText('%.4f' % h_width)
+
+    def activate_vline_override(self):
+        self.temporary_vline_override = True
+
+    def activate_hline_override(self):
+        self.temporary_hline_override = True
+
+    def reset_vertical_markers(self):
+        if not self.visible_plot_data_items == 1:
+            return
+        self.temporary_vline_override = False
+        for key_cb in self.dnncb:
+            if self.dnncb[key_cb].isChecked():
+                key_cv = key_cb.replace('B', 'V')
+                h_min = self.hline_min.getYPos()
+                h_max = self.hline_max.getYPos()
+                h_mid = (h_min + h_max) / 2.0
+                x_crossing_points = []
+                x_points = self.dnncv[key_cv].getData()[0]
+                y_points = self.dnncv[key_cv].getData()[1]
+                for i in range(x_points.size - 1):
+                    if y_points[i] < h_mid <= y_points[i + 1] or y_points[i + 1] < h_mid <= y_points[i]:
+                        y2, y1, x2, x1 = y_points[i + 1], y_points[i], x_points[i + 1], x_points[i]
+                        m = (y2 - y1) / (x2 - x1)
+                        x_crossing_point = (h_mid - y1) / m + x1
+                        x_crossing_points.append(x_crossing_point)
+                if len(x_crossing_points) > 1:
+                    self.vline_min.setValue(x_crossing_points[0])
+                    self.vline_max.setValue(x_crossing_points[-1])
+                break
+
+    def reset_horizontal_markers(self):
+        if self.visible_plot_data_items == 0:
+            return
+        self.temporary_hline_override = False
+        y_minimums = []
+        y_maximums = []
+        for key_cb in self.dnncb:
+            if self.dnncb[key_cb].isChecked():
+                key_cv = key_cb.replace('B', 'V')
+                y_min, y_max = self.dnncv[key_cv].dataBounds(1)
+                y_minimums.append(y_min)
+                y_maximums.append(y_max)
+        data_y_min = min(y_minimums)
+        data_y_max = max(y_maximums)
+        self.hline_min.setValue(data_y_min)
+        self.hline_max.setValue(data_y_max)
+
+    def reset_all_markers(self):
+        self.reset_horizontal_markers()
+        self.reset_vertical_markers()
+
+
 
     def det_cbox_toggled(self):
         item_list = self.plot_window.listDataItems()
@@ -304,9 +382,16 @@ class PyQtView(qtw.QMainWindow):
             key_cv = key_cb.replace('B', 'V')
             if self.dnncb[key_cb].isChecked() and self.dnncv[key_cv] not in item_list:
                 self.plot_window.addItem(self.dnncv[key_cv])
+                self.visible_plot_data_items += 1
             elif not self.dnncb[key_cb].isChecked() and self.dnncv[key_cv] in item_list:
                 self.plot_window.removeItem(self.dnncv[key_cv])
-        print(self.plot_window.listDataItems())
+                self.visible_plot_data_items -= 1
+        self.view_box.enableAutoRange(axis='y')
+
+    def test_button_clicked(self):
+        pass
+
+
 
 
 if __name__ == '__main__':

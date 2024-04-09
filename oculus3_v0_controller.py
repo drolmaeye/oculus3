@@ -44,20 +44,23 @@ class OculusController(qtc.QObject):
         self.data.wait_for_connection()
         self.data.add_callback(self.data_triggered)
 
+        # create a variable to hold total number of scan points
+        self.num_points = 11
+
         # connect signals to slots
         self.realtime_scandata_modified_signal.connect(self.update_realtime_scandata)
         self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
 
     def startup_sequence(self):
         self.view.show()
-        self.model.active_positioners_modified_signal.emit()
-        self.model.active_detectors_modified_signal.emit()
+        self.update_gui_positioner_names()
+        self.update_gui_detector_names()
 
     def update_active_positioner(self, index):
         if index < 0:
             return
         n = index + 1
-        self.update_plot_window_range(n)
+        self.update_plot_window_domain(n)
 
     def move_active_positioner(self, text):
         # move positioner only if scan is not active
@@ -77,36 +80,49 @@ class OculusController(qtc.QObject):
         current_index = self.cpt.value - 1
         for positioners in self.model.active_positioners_arrays:
             self.model.active_positioners_arrays[positioners][current_index] = self.model.rncv[positioners].value
-            # print(self.model.active_positioners_arrays[positioners][:current_index + 1])
         n = self.view.active_horizontal_axis_combo.currentIndex() + 1
         self.model.current_x_values[:current_index + 1] = self.model.active_positioners_arrays[f'R{n}CV'][:current_index + 1]
-        # print(self.model.current_x_values[:current_index + 1])
         for detectors in self.model.active_detectors_arrays:
             self.model.active_detectors_arrays[detectors][current_index] = self.model.dnncv[detectors].value
-            # print(self.model.active_detectors_arrays[detectors][:current_index + 1])
             if current_index > 0:
                 self.view.dnncv[detectors].setData(self.model.current_x_values[:current_index + 1],
                                                    self.model.active_detectors_arrays[detectors][:current_index + 1])
-        # self.view.update_plot()
+        self.view.view_box.enableAutoRange(axis='y')
+        if not self.view.temporary_hline_override:
+            self.view.reset_horizontal_markers()
+
 
     def initialize_finalize_scan(self, value):
         if value == 0:
             print('scan is starting')
             # scan is starting
+            self.view.temporary_vline_override = False
+            self.view.temporary_hline_override = False
             if self.model.positioners_modified_flag:
                 self.update_gui_positioner_names()
             if self.model.detectors_modified_flag:
                 self.update_gui_detector_names()
             n = self.view.active_horizontal_axis_combo.currentIndex() + 1
-            self.update_plot_window_range(n)
+            self.update_plot_window_domain(n)
+            y_min, y_max = -10, 10
+            y_axis_label = 'Counts'
+            label_style = {'color': '#808080', 'font': ' bold 16px'}
+            self.view.plot_window.setYRange(y_min, y_max)
+            self.view.plot_window.setLabel('left', y_axis_label, **label_style)
+            self.view.hline_min.setValue(y_min)
+            self.view.hline_max.setValue(y_max)
         else:
             print('scan is finsihed')
             # in reality, probably need to plot DddDA and PnRA arrays
-            num_points = self.npts.value
+            self.num_points = self.cpt.value
             for positioners in self.model.active_positioners_arrays:
-                print(self.model.active_positioners_arrays[positioners][:num_points])
+                print(self.model.active_positioners_arrays[positioners][:self.num_points])
             for detectors in self.model.active_detectors_arrays:
-                print(self.model.active_detectors_arrays[detectors][:num_points])
+                print(self.model.active_detectors_arrays[detectors][:self.num_points])
+            if not self.view.temporary_hline_override:
+                self.view.reset_horizontal_markers()
+            if not self.view.temporary_vline_override:
+                self.view.reset_vertical_markers()
 
     def update_gui_positioner_names(self):
         self.model.positioners_modified_flag = False
@@ -121,7 +137,7 @@ class OculusController(qtc.QObject):
             key_cb = detectors.replace('PV', 'CB')
             self.view.dnncb[key_cb].setText(self.model.active_detectors_names[detectors])
 
-    def update_plot_window_range(self, n):
+    def update_plot_window_domain(self, n):
         if self.data.value:
             x_min = self.model.pnpv[f'P{n}RA'].value[0]
             x_max = self.model.pnpv[f'P{n}RA'].value[self.cpt.value - 1]
@@ -135,13 +151,33 @@ class OculusController(qtc.QObject):
             else:
                 x_min = sp
                 x_max = ep
-        wd = x_max - x_min
+        width = x_max - x_min
         x_axis_label = self.view.active_horizontal_axis_combo.currentText()
         label_style = {'color': '#808080', 'font': ' bold 16px'}
-        return (self.view.plot_window.setXRange(x_min, x_max),
-                self.view.plot_window.setLabel('bottom', x_axis_label, **label_style),
-                self.view.vline_min.setValue(x_min + wd * 0.25),
-                self.view.vline_max.setValue(x_min + wd * 0.75))
+        self.view.plot_window.setXRange(x_min, x_max)
+        self.view.plot_window.setLabel('bottom', x_axis_label, **label_style)
+        self.view.vline_min.setValue(x_min + width * 0.25)
+        self.view.vline_max.setValue(x_min + width * 0.75)
+
+    def update_plot_window_range(self, initialize):
+        if initialize:
+            y_min, y_max = -10, 10
+        else:
+            y_minimums = []
+            y_maximums = []
+            item_list = self.view.plot_window.listDataItems()
+            for items in item_list:
+                y_bounds = items.dataBounds(1)
+                y_minimums.append(y_bounds[0])
+                y_maximums.append(y_bounds[1])
+            print(y_minimums, y_maximums)
+            y_min, y_max = min(y_minimums), max(y_maximums)
+        y_axis_label = 'Counts'
+        label_style = {'color': '#808080', 'font': ' bold 16px'}
+        self.view.plot_window.setYRange(y_min, y_max)
+        self.view.plot_window.setLabel('left', y_axis_label, **label_style)
+        self.view.hline_min.setValue(y_min)
+        self.view.hline_max.setValue(y_max)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,6 @@ from PyQt5 import QtCore as qtc
 import numpy as np
 from epics import PV, caget
 import constants
-import time
 
 
 class MainWindow(qtw.QMainWindow):
@@ -28,8 +27,14 @@ class CoreData(qtc.QObject):
 
         '''
         create empty core data dictionaries, including:
-        Pnpv PVs (see class pos_attrs), readback current value
-        Detector PVs, name valids, current values, and final data arrays
+        
+        Several positioner PVs (see class pos_attrs)
+        Readback current value
+        
+        Detector PVs
+        Name valids
+        Current values
+        Final data arrays
         '''
 
         self.pnpv = {}
@@ -60,7 +65,7 @@ class CoreData(qtc.QObject):
         self.positioners_modified_flag = True
         self.detectors_modified_flag = True
 
-        # initialize PVs in dictionaries
+        # create Positioner PVs and add to existing dictionaries
         for i in range(1, constants.NUM_POSITIONERS + 1):
             for a in CoreData.pos_attrs:
                 key_pnpv = 'P%i%s' % (i, a)
@@ -71,6 +76,7 @@ class CoreData(qtc.QObject):
             key_rncv = 'R%iCV' % i
             self.rncv[key_rncv] = PV(self.trunk + key_rncv)
 
+        # create detector PVs and add to existing dictionaries
         for i in range(1, constants.NUM_DETECTORS + 1):
             key_pv = 'D%2.2iPV' % i
             key_nv = 'D%2.2iNV' % i
@@ -88,6 +94,7 @@ class CoreData(qtc.QObject):
         self.active_positioners_modified_signal.connect(self.update_active_positioner)
         self.active_detectors_modified_signal.connect(self.update_active_detector)
 
+        # fill active positioner and detector arrays on program start
         self.initialize_active_positioners()
         self.initialize_active_detectors()
 
@@ -111,11 +118,16 @@ class CoreData(qtc.QObject):
                 del self.active_positioners_arrays[f'R{n}CV']
                 del self.active_positioners_names[f'P{n}PV']
 
-    def initialize_active_positioners(self):
-        for n in range(1, constants.NUM_POSITIONERS + 1):
-            if self.pnpv[f'P{n}NV'].value == 0:
-                self.active_positioners_arrays[f'R{n}CV'] = np.zeros(constants.MAX_NUM_POINTS)
-                self.update_active_positioners_names(n)
+    def update_active_detector(self, pvname):
+        nn = pvname[-4:-2]
+        validity = caget(self.trunk + f'D{nn}NV', use_monitor=False)
+        if validity == 0:
+            self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+            self.update_active_detectors_names(nn)
+        else:
+            if f'D{nn}CV' in self.active_detectors_arrays:
+                del self.active_detectors_arrays[f'D{nn}CV']
+                del self.active_detectors_names[f'D{nn}PV']
 
     def update_active_positioners_names(self, n):
         # either get a proper motor name or just identify by PV name
@@ -133,32 +145,6 @@ class CoreData(qtc.QObject):
         else:
             name = self.pnpv[f'P{n}PV'].value
         self.active_positioners_names[f'P{n}PV'] = name
-
-    def update_active_detector(self, pvname):
-        uad_start = time.time_ns() / 1000000000
-        nn = pvname[-4:-2]
-        print(nn)
-        validity = caget(self.trunk + f'D{nn}NV', use_monitor=False)
-        print(validity)
-        #  check to see if detector PV has been accepted by EPICS
-        if validity == 0:
-            # fill active detectors data arrays dict with dummy arrays
-            self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
-            self.update_active_detectors_names(nn)
-        else:
-            if f'D{nn}CV' in self.active_detectors_arrays:
-                del self.active_detectors_arrays[f'D{nn}CV']
-                del self.active_detectors_names[f'D{nn}PV']
-        uad_end = time.time_ns() / 1000000000
-        print(f'update one detector tme is {uad_end - uad_start}')
-        return print(self.active_detectors_names)
-
-    def initialize_active_detectors(self):
-        for i in range(1, constants.NUM_DETECTORS + 1):
-            nn = '%2.2i' % i
-            if caget(self.trunk + f'D{nn}NV') == 0:
-                self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
-                self.update_active_detectors_names(nn)
 
     def update_active_detectors_names(self, nn):
         if '.' in self.dnnpv[f'D{nn}PV'].value:
@@ -185,7 +171,19 @@ class CoreData(qtc.QObject):
                 self.active_detectors_names[f'D{nn}PV'] = name
             else:
                 self.active_detectors_names[f'D{nn}PV'] = self.dnnpv[f'D{nn}PV'].value
-        return print(self.active_detectors_names)
+
+    def initialize_active_positioners(self):
+        for n in range(1, constants.NUM_POSITIONERS + 1):
+            if self.pnpv[f'P{n}NV'].value == 0:
+                self.active_positioners_arrays[f'R{n}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+                self.update_active_positioners_names(n)
+
+    def initialize_active_detectors(self):
+        for i in range(1, constants.NUM_DETECTORS + 1):
+            nn = '%2.2i' % i
+            if self.dnnnv[f'D{nn}NV'].value == 0:
+                self.active_detectors_arrays[f'D{nn}CV'] = np.zeros(constants.MAX_NUM_POINTS)
+                self.update_active_detectors_names(nn)
 
 
 if __name__ == '__main__':

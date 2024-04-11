@@ -124,10 +124,6 @@ class PyQtView(qtw.QMainWindow):
         self.hline_min.sigDragged.connect(self.activate_hline_override)
         self.hline_max.sigDragged.connect(self.activate_hline_override)
 
-
-
-
-
         '''
         Right side
         '''
@@ -365,16 +361,17 @@ class PyQtView(qtw.QMainWindow):
                 y_min, y_max = self.dnncv[key_cv].dataBounds(1)
                 y_minimums.append(y_min)
                 y_maximums.append(y_max)
-        data_y_min = min(y_minimums)
-        data_y_max = max(y_maximums)
+        try:
+            data_y_min = min(y_minimums)
+            data_y_max = max(y_maximums)
+        except TypeError:
+            return
         self.hline_min.setValue(data_y_min)
         self.hline_max.setValue(data_y_max)
 
     def reset_all_markers(self):
         self.reset_horizontal_markers()
         self.reset_vertical_markers()
-
-
 
     def det_cbox_toggled(self):
         item_list = self.plot_window.listDataItems()
@@ -388,10 +385,24 @@ class PyQtView(qtw.QMainWindow):
                 self.visible_plot_data_items -= 1
         self.view_box.enableAutoRange(axis='y')
 
+    def clear_plots(self):
+        for each in self.dnncv:
+            self.dnncv[each].clear()
+            self.dnncv[each].updateItems()
+
+    def initialize_plot_window_y_range(self):
+        y_min, y_max = -10, 10
+        y_axis_label = 'Counts'
+        label_style = {'color': '#808080', 'font': ' bold 16px'}
+        self.plot_window.setYRange(y_min, y_max)
+        self.plot_window.setLabel('left', y_axis_label, **label_style)
+        self.hline_min.setValue(y_min)
+        self.hline_max.setValue(y_max)
+
     def test_button_clicked(self):
-        pass
-
-
+        for each in self.dnncv:
+            self.dnncv[each].clear()
+            self.dnncv[each].updateItems()
 
 
 if __name__ == '__main__':

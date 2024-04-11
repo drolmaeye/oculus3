@@ -13,14 +13,6 @@ from oculus3_v0_core import CoreData
 from oculus3_v0_view import PyQtView
 
 
-class MainWindow(qtw.QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setGeometry(100, 100, 1080, 720)
-        self.setWindowTitle('Oculus')
-        self.setWindowIcon(qtg.QIcon('eye1.png'))
-
-
 class OculusController(qtc.QObject):
 
     realtime_scandata_modified_signal = qtc.pyqtSignal()
@@ -91,11 +83,11 @@ class OculusController(qtc.QObject):
         if not self.view.temporary_hline_override:
             self.view.reset_horizontal_markers()
 
-
     def initialize_finalize_scan(self, value):
         if value == 0:
             print('scan is starting')
             # scan is starting
+            self.view.clear_plots()
             self.view.temporary_vline_override = False
             self.view.temporary_hline_override = False
             if self.model.positioners_modified_flag:
@@ -104,21 +96,15 @@ class OculusController(qtc.QObject):
                 self.update_gui_detector_names()
             n = self.view.active_horizontal_axis_combo.currentIndex() + 1
             self.update_plot_window_domain(n)
-            y_min, y_max = -10, 10
-            y_axis_label = 'Counts'
-            label_style = {'color': '#808080', 'font': ' bold 16px'}
-            self.view.plot_window.setYRange(y_min, y_max)
-            self.view.plot_window.setLabel('left', y_axis_label, **label_style)
-            self.view.hline_min.setValue(y_min)
-            self.view.hline_max.setValue(y_max)
+            self.view.initialize_plot_window_y_range()
         else:
-            print('scan is finsihed')
-            # in reality, probably need to plot DddDA and PnRA arrays
+            print('scan is finished')
+            # in consider plotting DddDA and PnRA arrays
             self.num_points = self.cpt.value
-            for positioners in self.model.active_positioners_arrays:
-                print(self.model.active_positioners_arrays[positioners][:self.num_points])
-            for detectors in self.model.active_detectors_arrays:
-                print(self.model.active_detectors_arrays[detectors][:self.num_points])
+            # ###for positioners in self.model.active_positioners_arrays:
+            # ###    print(self.model.active_positioners_arrays[positioners][:self.num_points])
+            # ###for detectors in self.model.active_detectors_arrays:
+            # ###    print(self.model.active_detectors_arrays[detectors][:self.num_points])
             if not self.view.temporary_hline_override:
                 self.view.reset_horizontal_markers()
             if not self.view.temporary_vline_override:
@@ -165,12 +151,10 @@ class OculusController(qtc.QObject):
         else:
             y_minimums = []
             y_maximums = []
-            item_list = self.view.plot_window.listDataItems()
-            for items in item_list:
+            for items in self.view.plot_window.listDataItems():
                 y_bounds = items.dataBounds(1)
                 y_minimums.append(y_bounds[0])
                 y_maximums.append(y_bounds[1])
-            print(y_minimums, y_maximums)
             y_min, y_max = min(y_minimums), max(y_maximums)
         y_axis_label = 'Counts'
         label_style = {'color': '#808080', 'font': ' bold 16px'}

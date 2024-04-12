@@ -9,6 +9,8 @@ from epics import PV, caget
 from epics.devices import Scan
 import time
 import os
+from pyqtgraph.graphicsItems.LegendItem import ItemSample
+from detector_checkbox import Window
 
 
 class PyQtView(qtw.QMainWindow):
@@ -364,10 +366,10 @@ class PyQtView(qtw.QMainWindow):
         try:
             data_y_min = min(y_minimums)
             data_y_max = max(y_maximums)
+            self.hline_min.setValue(data_y_min)
+            self.hline_max.setValue(data_y_max)
         except TypeError:
             return
-        self.hline_min.setValue(data_y_min)
-        self.hline_max.setValue(data_y_max)
 
     def reset_all_markers(self):
         self.reset_horizontal_markers()
@@ -400,9 +402,13 @@ class PyQtView(qtw.QMainWindow):
         self.hline_max.setValue(y_max)
 
     def test_button_clicked(self):
-        for each in self.dnncv:
-            self.dnncv[each].clear()
-            self.dnncv[each].updateItems()
+        for items in self.dnncv:
+            print('found an item')
+            a = ItemSample(self.dnncv[items])
+            print(type(a))
+            self.plot_window.addItem(a)
+            self.dnncv[items].updateItems()
+            time.sleep(0.5)
 
 
 if __name__ == '__main__':

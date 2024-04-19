@@ -11,6 +11,7 @@ import os
 import constants
 from oculus3_v0_core import CoreData
 from oculus3_v0_view import PyQtView
+import mda
 
 
 class OculusController(qtc.QObject):
@@ -36,6 +37,8 @@ class OculusController(qtc.QObject):
         self.data.wait_for_connection()
         self.data.add_callback(self.data_triggered)
 
+        # file management PVs
+
         # create a variable to hold total number of scan points
         self.num_points = 11
 
@@ -44,9 +47,40 @@ class OculusController(qtc.QObject):
         self.scan_start_stop_signal.connect(self.initialize_finalize_scan)
 
     def startup_sequence(self):
-        self.view.show()
         self.update_gui_positioner_names()
         self.update_gui_detector_names()
+        self.view.show()
+        # print(self.view.file_control.size())
+
+    def load_new_data(self, text):
+        # get the current file path for opening or building new filename
+        fsystem = self.model.file_path_fs.value
+        fsubdir = self.model.file_path_sd.value
+        if fsubdir:
+            fpath = f'{fsystem}/{fsubdir}'
+        else:
+            fpath = fsystem
+        if text == 'Load data':
+            # use browses filesystem for new filename
+            fname, fext = qtw.QFileDialog.getOpenFileName(directory=fpath, filter='mda files (*.mda)')
+        else:
+            # current file is incremented or decremented by one
+            current_tail = self.view.file_name_ledit.text()
+            current_fnumber = current_tail[(current_tail.rfind('_') + 1):-4]
+            fill_length = len(current_fnumber)
+            if text == '<':
+                new_fnumber = int(current_fnumber) - 1
+            else:
+                new_fnumber = int(current_fnumber) + 1
+            new_tail = current_tail.replace(current_fnumber, str(new_fnumber).zfill(fill_length))
+            fname = f'{fpath}/{new_tail}'
+        if os.path.isfile(fname):
+            head, tail = os.path.split(fname)
+            self.view.file_path_ledit.setText(head)
+            self.view.file_name_ledit.setText(tail)
+            dim = mda.readMDA(fname=fname, showHelp=0)
+        else:
+            print('no file to open')
 
     def update_active_positioner(self, index):
         if index < 0:
@@ -69,16 +103,15 @@ class OculusController(qtc.QObject):
 
     # PyQtSlots
     def update_realtime_scandata(self):
-        current_index = self.cpt.value - 1
+        current_index = self.cpt.get(use_monitor=False) - 1
         for positioners in self.model.active_positioners_arrays:
             self.model.active_positioners_arrays[positioners][current_index] = self.model.rncv[positioners].value
         n = self.view.active_horizontal_axis_combo.currentIndex() + 1
-        self.model.current_x_values[:current_index + 1] = self.model.active_positioners_arrays[f'R{n}CV'][:current_index + 1]
+        x_values = self.model.active_positioners_arrays[f'R{n}CV'][:current_index + 1]
         for detectors in self.model.active_detectors_arrays:
             self.model.active_detectors_arrays[detectors][current_index] = self.model.dnncv[detectors].value
             if current_index > 0:
-                self.view.dnncv[detectors].setData(self.model.current_x_values[:current_index + 1],
-                                                   self.model.active_detectors_arrays[detectors][:current_index + 1])
+                self.view.dnncv[detectors].setData(x_values, self.model.active_detectors_arrays[detectors][:current_index + 1])
         self.view.view_box.enableAutoRange(axis='y')
         if not self.view.temporary_hline_override:
             self.view.reset_horizontal_markers()
@@ -96,15 +129,14 @@ class OculusController(qtc.QObject):
                 self.update_gui_detector_names()
             n = self.view.active_horizontal_axis_combo.currentIndex() + 1
             self.update_plot_window_domain(n)
-            self.view.initialize_plot_window_y_range()
         else:
             print('scan is finished')
             # in consider plotting DddDA and PnRA arrays
             self.num_points = self.cpt.value
-            # ###for positioners in self.model.active_positioners_arrays:
-            # ###    print(self.model.active_positioners_arrays[positioners][:self.num_points])
-            # ###for detectors in self.model.active_detectors_arrays:
-            # ###    print(self.model.active_detectors_arrays[detectors][:self.num_points])
+            for positioners in self.model.active_positioners_arrays:
+                print(self.model.active_positioners_arrays[positioners][:self.num_points])
+            for detectors in self.model.active_detectors_arrays:
+                print(self.model.active_detectors_arrays[detectors][:self.num_points])
             if not self.view.temporary_hline_override:
                 self.view.reset_horizontal_markers()
             if not self.view.temporary_vline_override:
@@ -144,24 +176,6 @@ class OculusController(qtc.QObject):
         self.view.plot_window.setLabel('bottom', x_axis_label, **label_style)
         self.view.vline_min.setValue(x_min + width * 0.25)
         self.view.vline_max.setValue(x_min + width * 0.75)
-
-    def update_plot_window_range(self, initialize):
-        if initialize:
-            y_min, y_max = -10, 10
-        else:
-            y_minimums = []
-            y_maximums = []
-            for items in self.view.plot_window.listDataItems():
-                y_bounds = items.dataBounds(1)
-                y_minimums.append(y_bounds[0])
-                y_maximums.append(y_bounds[1])
-            y_min, y_max = min(y_minimums), max(y_maximums)
-        y_axis_label = 'Counts'
-        label_style = {'color': '#808080', 'font': ' bold 16px'}
-        self.view.plot_window.setYRange(y_min, y_max)
-        self.view.plot_window.setLabel('left', y_axis_label, **label_style)
-        self.view.hline_min.setValue(y_min)
-        self.view.hline_max.setValue(y_max)
 
 
 if __name__ == '__main__':

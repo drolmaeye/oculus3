@@ -52,6 +52,9 @@ class PyQtView(qtw.QMainWindow):
         '''Plot window'''
 
         self.plot_window = pg.PlotWidget(name='plot1')
+        y_axis_label = 'Counts'
+        label_style = {'color': '#808080', 'font': ' bold 16px'}
+        self.plot_window.setLabel('left', y_axis_label, **label_style)
         self.plot_item = self.plot_window.getPlotItem()
         self.view_box = self.plot_item.getViewBox()
         self.left_side_layout.addWidget(self.plot_window)
@@ -101,9 +104,9 @@ class PyQtView(qtw.QMainWindow):
         self.vline_min = pg.InfiniteLine(pos=-0.3, angle=90, pen='b', movable=True)
         self.vline_mid = pg.InfiniteLine(pos=0.0, angle=90, pen={'color': 'r', 'style': qtc.Qt.DashLine}, movable=False)
         self.vline_max = pg.InfiniteLine(pos=0.3, angle=90, pen='b', movable=True)
-        self.hline_min = pg.InfiniteLine(pos=-0.3, angle=0, pen='b', movable=True)
+        self.hline_min = pg.InfiniteLine(pos=-10.0, angle=0, pen='b', movable=True)
         self.hline_mid = pg.InfiniteLine(pos=0.0, angle=0, pen={'color': 'r', 'style': qtc.Qt.DashLine}, movable=False)
-        self.hline_max = pg.InfiniteLine(pos=0.3, angle=0, pen='b', movable=True)
+        self.hline_max = pg.InfiniteLine(pos=10.0, angle=0, pen='b', movable=True)
 
         self.plot_window.addItem(self.vline_min)
         self.plot_window.addItem(self.vline_mid)
@@ -135,25 +138,34 @@ class PyQtView(qtw.QMainWindow):
         # create file control groupbox and add to the right side layout
         self.file_control = qtw.QGroupBox()
         self.file_control.setTitle('File Control')
-        self.file_control_layout = qtw.QHBoxLayout()
+        self.file_control_layout = qtw.QGridLayout()
         self.file_control.setLayout(self.file_control_layout)
         self.right_side_layout.addWidget(self.file_control)
 
         # create file control widgets
-        self.current_file_label = qtw.QLabel('Current scan file')
-        self.current_file_ledit = qtw.QLineEdit()
-        self.current_file_decrement = qtw.QPushButton('<')
-        self.current_file_increment = qtw.QPushButton('>')
+        self.file_path_label = qtw.QLabel('File path')
+        self.file_path_ledit = qtw.QLineEdit()
         self.load_file_button = qtw.QPushButton('Load data')
-        self.save_file_button = qtw.QPushButton('Save ASCII')
+        self.file_name_label = qtw.QLabel('File name')
+        self.file_name_ledit = qtw.QLineEdit()
+        self.current_file_decrement_button = qtw.QPushButton('<')
+        self.current_file_increment_button = qtw.QPushButton('>')
+
+        # connect signal to slots
+        self.load_file_button.clicked.connect(lambda: controller.load_new_data(self.load_file_button.text()))
+        self.current_file_decrement_button.clicked.connect(lambda: controller.load_new_data(self.current_file_decrement_button.text()))
+        self.current_file_increment_button.clicked.connect(lambda: controller.load_new_data(self.current_file_increment_button.text()))
 
         # add file control widgets to the file control groupbox
-        self.file_control_layout.addWidget(self.current_file_label)
-        self.file_control_layout.addWidget(self.current_file_ledit)
-        self.file_control_layout.addWidget(self.current_file_decrement)
-        self.file_control_layout.addWidget(self.current_file_increment)
-        self.file_control_layout.addWidget(self.load_file_button)
-        self.file_control_layout.addWidget(self.save_file_button)
+        self.file_control_layout.addWidget(self.file_path_label, 0, 0)
+        self.file_control_layout.addWidget(self.file_path_ledit, 0, 1, 1, 3)
+        self.file_control_layout.addWidget(self.load_file_button, 0, 4, 1, 2)
+        self.file_control_layout.addWidget(self.file_name_label, 1, 0)
+        self.file_control_layout.addWidget(self.file_name_ledit, 1, 1, 1, 3)
+        self.file_control_layout.addWidget(self.current_file_decrement_button, 1, 4)
+        self.file_control_layout.addWidget(self.current_file_increment_button, 1, 5)
+
+
 
         '''Markers control'''
 
@@ -267,10 +279,14 @@ class PyQtView(qtw.QMainWindow):
             for j in range(10):
                 number = i * 10 + 1 + j
                 key_cb = 'D%2.2iCB' % number
-                self.dnncb[key_cb] = qtw.QCheckBox(str(number))
-                # self.dnncb[key_cb] = qtw.QCheckBox()
+                h_layout = qtw.QHBoxLayout()
+                d_label = qtw.QLabel(key_cb[:3])
+                d_label.setFixedWidth(30)
+                self.dnncb[key_cb] = qtw.QCheckBox()
                 self.dnncb[key_cb].stateChanged.connect(self.det_cbox_toggled)
-                detectors_tab_layout.addWidget(self.dnncb[key_cb])
+                h_layout.addWidget(d_label)
+                h_layout.addWidget(self.dnncb[key_cb])
+                detectors_tab_layout.addLayout(h_layout)
             label_min = i * 10 + 1
             label_max = label_min + 9
             self.detectors_tab_widget.addTab(detectors_tab, f'{label_min} - {label_max}')
@@ -402,13 +418,15 @@ class PyQtView(qtw.QMainWindow):
         self.hline_max.setValue(y_max)
 
     def test_button_clicked(self):
-        for items in self.dnncv:
-            print('found an item')
-            a = ItemSample(self.dnncv[items])
-            print(type(a))
-            self.plot_window.addItem(a)
-            self.dnncv[items].updateItems()
-            time.sleep(0.5)
+        short_path = caget('16test:saveData_fullPathName', as_string=True)
+        print(short_path)
+        fs = caget('16test:saveData_fileSystem')
+        sd = caget('16test:saveData_subDir')
+        long_path = f'{fs}/{sd}'
+        print(long_path)
+        sfname = qtw.QFileDialog.getOpenFileName(directory=short_path)
+        lfname = qtw.QFileDialog.getOpenFileName(directory=long_path)
+        print(sfname, lfname)
 
 
 if __name__ == '__main__':

@@ -55,15 +55,11 @@ class CoreData(qtc.QObject):
         self.active_detectors_arrays = {}
         self.active_detectors_names = {}
 
-        self.current_x_values = np.zeros(constants.MAX_NUM_POINTS)
-
         # combine ioc prefix with scan number to generate PV trunk
         # note that stump should end in a dot (e.g., 'scan1.')
+        self.root = root
+        self.stump = stump
         self.trunk = root + stump
-
-        # flags to indicate if positioners or detectors have been modified
-        self.positioners_modified_flag = True
-        self.detectors_modified_flag = True
 
         # create Positioner PVs and add to existing dictionaries
         for i in range(1, constants.NUM_POSITIONERS + 1):
@@ -89,6 +85,16 @@ class CoreData(qtc.QObject):
             # add callback to DnnPV (after connection is established)
             self.dnnpv[key_pv].wait_for_connection()
             self.dnnpv[key_pv].add_callback(self.detectors_modified)
+
+        # create saveData PVs for file management
+        self.file_path_fs = PV(root + 'saveData_fileSystem')
+        self.file_path_sd = PV(root + 'saveData_subDir')
+        self.file_path_display = PV(root + 'saveData_fullPathName')
+        self.file_name_display = PV(root + 'saveData_fileName')
+
+        # flags to indicate if positioners, detectors, path have been modified
+        self.positioners_modified_flag = True
+        self.detectors_modified_flag = True
 
         # connect signals to slots
         self.active_positioners_modified_signal.connect(self.update_active_positioner)
@@ -137,14 +143,15 @@ class CoreData(qtc.QObject):
             if record_type == 'motor':
                 description = caget(new_trunk + '.DESC')
                 if description:
-                    name = description
+                    name = f' ({description})'
                 else:
-                    name = self.pnpv[f'P{n}PV'].value
+                    name = ''
             else:
-                name = self.pnpv[f'P{n}PV'].value
+                name = ''
         else:
-            name = self.pnpv[f'P{n}PV'].value
+            name = ''
         self.active_positioners_names[f'P{n}PV'] = name
+        self.active_positioners_names[f'P{n}PV'] = self.pnpv[f'P{n}PV'].value + name
 
     def update_active_detectors_names(self, nn):
         if '.' in self.dnnpv[f'D{nn}PV'].value:
@@ -154,23 +161,34 @@ class CoreData(qtc.QObject):
             if record_type == 'scaler':
                 if '.S' in new_branch:
                     name_branch = new_branch.replace('S', 'NM')
-                    name = caget(new_trunk + name_branch)
+                    description = caget(new_trunk + name_branch)
+                    if description:
+                        name = f' ({description})'
+                    else:
+                        name = ''
                 elif '.T' in new_branch:
-                    name = 'Elapsed Time'
+                    name = ' (Elapsed Time)'
                 else:
                     name = ''
             elif record_type == 'transform':
                 name_branch = new_branch[:1] + 'CMT' + new_branch[1:]
-                name = caget(new_trunk + name_branch)
+                description = caget(new_trunk + name_branch)
+                if description:
+                    name = f' ({description})'
+                else:
+                    name = ''
             elif record_type == 'mca':
                 name_branch = new_branch + 'NM'
-                name = caget(new_trunk + name_branch)
+                description = caget(new_trunk + name_branch)
+                if description:
+                    name = f' ({description})'
+                else:
+                    name = ''
             else:
                 name = ''
-            if name:
-                self.active_detectors_names[f'D{nn}PV'] = name
-            else:
-                self.active_detectors_names[f'D{nn}PV'] = self.dnnpv[f'D{nn}PV'].value
+        else:
+            name = ''
+        self.active_detectors_names[f'D{nn}PV'] = self.dnnpv[f'D{nn}PV'].value + name
 
     def initialize_active_positioners(self):
         for n in range(1, constants.NUM_POSITIONERS + 1):

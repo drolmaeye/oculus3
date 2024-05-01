@@ -150,7 +150,7 @@ class CoreData(qtc.QObject):
                 name = ''
         else:
             name = ''
-        self.active_positioners_names[f'P{n}PV'] = name
+        # self.active_positioners_names[f'P{n}PV'] = name
         self.active_positioners_names[f'P{n}PV'] = self.pnpv[f'P{n}PV'].value + name
 
     def update_active_detectors_names(self, nn):

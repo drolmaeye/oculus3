@@ -301,6 +301,7 @@ class PyQtView(qtw.QMainWindow):
         self.right_side_layout.addWidget(self.windows_control)
 
         # create windows control widgets
+        self.test_cbox = qtw.QCheckBox('Test')
         self.test_button = qtw.QPushButton('Test')
         self.overlays_button = qtw.QPushButton('Overlays')
         self.abort_button = qtw.QPushButton('Abort')
@@ -310,6 +311,7 @@ class PyQtView(qtw.QMainWindow):
         self.test_button.clicked.connect(self.test_button_clicked)
 
         # add windows control widgets to windows control groupbox
+        self.windows_control_layout.addWidget(self.test_cbox)
         self.windows_control_layout.addWidget(self.test_button)
         self.windows_control_layout.addWidget(self.overlays_button)
         self.windows_control_layout.addWidget(self.abort_button)

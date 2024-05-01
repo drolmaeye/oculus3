@@ -110,8 +110,27 @@ class OculusController(qtc.QObject):
         x_values = self.model.active_positioners_arrays[f'R{n}CV'][:current_index + 1]
         for detectors in self.model.active_detectors_arrays:
             self.model.active_detectors_arrays[detectors][current_index] = self.model.dnncv[detectors].value
+            y_values = self.model.active_detectors_arrays[detectors][:current_index + 1]
+            print(y_values)
             if current_index > 0:
-                self.view.dnncv[detectors].setData(x_values, self.model.active_detectors_arrays[detectors][:current_index + 1])
+                # derivative test start
+                # y_values = self.model.active_detectors_arrays[detectors][:current_index + 1]
+                if self.view.test_cbox.isChecked():
+                    x_length = len(x_values)
+                    y_temp = np.zeros(len(y_values))
+                    for x in range(x_length):
+                        if x == 0 or x == x_length - 1:
+                            pass
+                        else:
+                            dy = y_values[x + 1] - y_values[x - 1]
+                            dx = x_values[x + 1] - x_values[x - 1]
+                            y_temp[x] = dy/dx
+                    y_temp[0] = y_temp[1]
+                    y_temp[-1] = y_temp[-2]
+                    y_values = y_temp
+                self.view.dnncv[detectors].setData(x_values, y_values)
+                # derivative test end
+                # self.view.dnncv[detectors].setData(x_values, self.model.active_detectors_arrays[detectors][:current_index + 1])
         self.view.view_box.enableAutoRange(axis='y')
         if not self.view.temporary_hline_override:
             self.view.reset_horizontal_markers()
